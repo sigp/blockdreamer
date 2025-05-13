@@ -2,12 +2,17 @@ use crate::cli::CliConfig;
 use crate::post::PostEndpoint;
 use clap::Parser;
 use config::{Config, PostEndpointConfig};
-use eth2::types::{BlindedBeaconBlock, Slot, Uint256};
+use eth2::{
+    types::{BlindedBeaconBlock, BlockId, Slot, Uint256},
+    BeaconNodeHttpClient, Timeouts,
+};
 use eth2_network_config::Eth2NetworkConfig;
 use futures::future::join_all;
 use itertools::Itertools;
 use logging::test_logger;
 use node::Node;
+use ruint::uint;
+use sensitive_url::SensitiveUrl;
 use slot_clock::{SlotClock, SystemTimeSlotClock};
 use std::collections::HashMap;
 use std::process::ExitCode;
@@ -33,6 +38,8 @@ type E = eth2::types::GnosisEthSpec;
 const VERBOSE: bool = false;
 
 const NUM_SLOTS_IN_MEMORY: u64 = 8;
+
+const WEI_PER_GWEI: Uint256 = uint!(1_000_000_000_U256);
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
@@ -124,6 +131,13 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
         .map(|config| Node::new(config, spec.clone()))
         .collect::<Result<Vec<_>, String>>()?;
 
+    // Establish connection to canonical BN.
+    let canonical_bn = {
+        let url = SensitiveUrl::parse(&config.canonical_bn)
+            .map_err(|e| format!("Invalid URL: {:?}", e))?;
+        BeaconNodeHttpClient::new(url, Timeouts::set_all(Duration::from_secs(6)))
+    };
+
     // Establish connections to post endpoints.
     let post_endpoints = config
         .post_endpoints
@@ -182,11 +196,11 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
             match result.map_err(|e| format!("Task panicked: {:?}", e))? {
                 Ok((block, metadata)) => {
                     eprintln!(
-                        "slot {}: block from {} with {} attestations & purported reward {} wei",
+                        "slot {}: block from {}: {} attestations ({} gwei))",
                         slot,
                         name,
                         block.body().attestations().count(),
-                        metadata.map_or(Uint256::ZERO, |m| m.consensus_block_value)
+                        metadata.map_or(Uint256::ZERO, |m| m.consensus_block_value / WEI_PER_GWEI)
                     );
 
                     if !post_endpoints.is_empty() {
@@ -228,6 +242,23 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
             all_blocks.insert(slot, slot_blocks);
         } else {
             eprintln!("slot {slot}: discarding results due to failures");
+        }
+
+        // Compare canonical block from previous slot to dream blocks.
+        let prev_slot = slot - 1;
+        match canonical_bn
+            .get_beacon_rewards_blocks(BlockId::Slot(prev_slot))
+            .await
+        {
+            Ok(res) => {
+                eprintln!(
+                    "slot {prev_slot}: block from canonical chain: {} gwei (att: {} gwei)",
+                    res.data.total, res.data.attestations
+                );
+            }
+            Err(e) => {
+                eprintln!("Error fetching canonical block rewards at slot {prev_slot}: {e:?}");
+            }
         }
 
         // Prune blocks to prevent the in-memory map from consuming too much memory. We really only

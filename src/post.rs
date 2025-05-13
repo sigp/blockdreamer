@@ -124,7 +124,9 @@ impl PostEndpoint {
             if self.compare_rewards {
                 let reward = result["total"].as_u64().unwrap();
                 let att_reward = result["attestation_rewards"]["total"].as_u64().unwrap();
-                println!("rewards from {name}: {reward} gwei (att: {att_reward} gwei)");
+                eprintln!(
+                    "slot {slot}: calculated rewards for {name}: {reward} gwei (att: {att_reward} gwei)"
+                );
 
                 if reward > max_reward {
                     max_reward = reward;
@@ -155,8 +157,9 @@ impl PostEndpoint {
             }
         }
 
-        if self.compare_rewards {
-            println!("most profitable block from {max_reward_nodes:?}");
+        if self.compare_rewards && names.len() > 1 {
+            let max_reward_comma_sep = max_reward_nodes.join(",");
+            eprintln!("most profitable block from {max_reward_comma_sep}");
         }
 
         Ok(())
