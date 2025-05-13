@@ -12,6 +12,9 @@ use std::{
 pub struct Config {
     pub network: Option<String>,
     pub network_dir: Option<PathBuf>,
+    // Deprecated for now, as we have removed distance calculations from blockdreamer.
+    #[allow(dead_code)]
+    #[serde(default)]
     pub canonical_bn: String,
     /// URLs to push the dreamt blocks to (probably blockgauge).
     #[serde(default)]

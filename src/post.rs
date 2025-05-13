@@ -32,7 +32,7 @@ pub struct PostPayload<E: EthSpec> {
 impl PostEndpoint {
     pub fn new(config: &PostEndpointConfig) -> Arc<Self> {
         let client = Client::new();
-        let name = config.url.clone();
+        let name = config.name.clone();
         let url = config.url.clone();
         Arc::new(Self {
             name,
