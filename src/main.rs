@@ -1,5 +1,4 @@
 use crate::cli::CliConfig;
-use crate::distance::Distance;
 use crate::post::PostEndpoint;
 use clap::Parser;
 use config::{Config, PostEndpointConfig};
@@ -12,6 +11,7 @@ use futures::future::join_all;
 use itertools::Itertools;
 use logging::test_logger;
 use node::Node;
+use ruint::uint;
 use sensitive_url::SensitiveUrl;
 use slot_clock::{SlotClock, SystemTimeSlotClock};
 use std::collections::HashMap;
@@ -25,7 +25,6 @@ use tokio::signal::unix::{signal, SignalKind};
 
 mod cli;
 mod config;
-mod distance;
 mod node;
 mod post;
 mod tests;
@@ -38,9 +37,9 @@ type E = eth2::types::GnosisEthSpec;
 // FIXME: add to config
 const VERBOSE: bool = false;
 
-const SIGNIFICANCE_NUMERATOR: usize = 2;
-const SIGNIFICANCE_DENOM: usize = 1;
 const NUM_SLOTS_IN_MEMORY: u64 = 8;
+
+const WEI_PER_GWEI: Uint256 = uint!(1_000_000_000_U256);
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
@@ -99,14 +98,6 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
 
     // This logger is unused currently.
     let dummy_logger = test_logger();
-
-    // Mapping from node name to label.
-    let labels = config
-        .nodes
-        .iter()
-        .filter(|node| node.enabled)
-        .map(|node| (node.name.clone(), node.label.clone()))
-        .collect::<HashMap<_, _>>();
 
     // Get network config and slot clock.
     let network_config = match (&config.network, &config.network_dir) {
@@ -205,11 +196,11 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
             match result.map_err(|e| format!("Task panicked: {:?}", e))? {
                 Ok((block, metadata)) => {
                     eprintln!(
-                        "slot {}: block from {} with {} attestations & purported reward {} wei",
+                        "slot {}: block from {}: {} attestations ({} gwei))",
                         slot,
                         name,
-                        block.body().attestations().len(),
-                        metadata.map_or(Uint256::zero(), |m| m.consensus_block_value)
+                        block.body().attestations().count(),
+                        metadata.map_or(Uint256::ZERO, |m| m.consensus_block_value / WEI_PER_GWEI)
                     );
 
                     if !post_endpoints.is_empty() {
@@ -256,100 +247,17 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
         // Compare canonical block from previous slot to dream blocks.
         let prev_slot = slot - 1;
         match canonical_bn
-            .get_beacon_blocks(BlockId::Slot(prev_slot))
+            .get_beacon_rewards_blocks(BlockId::Slot(prev_slot))
             .await
         {
-            Ok(Some(res)) => {
-                let (full_block, _) = res.data.deconstruct();
-                let (block, _) = full_block.into();
-                if let Some(dream_blocks) = all_blocks.get(&prev_slot) {
-                    let mut distances = dream_blocks
-                        .iter()
-                        .map(|(name, dream_block)| {
-                            let delta = dream_block.delta(&block).unwrap();
-                            let distance = BlindedBeaconBlock::<E>::delta_to_distance(&delta);
-                            if VERBOSE {
-                                eprintln!("canonical({})-{} delta: {:#?}", prev_slot, name, delta);
-                            }
-                            eprintln!(
-                                "slot {}: canonical <=> {} distance: {}",
-                                prev_slot, name, distance
-                            );
-                            (name, distance)
-                        })
-                        .collect::<Vec<_>>();
-
-                    distances.sort_unstable_by_key(|(_, distance)| *distance);
-
-                    let (closest_name, closest_distance) = &distances[0];
-                    let (second_closest_name, second_closest_distance) =
-                        &distances.get(1).unwrap_or(&distances[0]);
-
-                    let closest_label = &labels[closest_name.as_str()];
-                    let second_closest_label = &labels[second_closest_name.as_str()];
-
-                    if closest_label == second_closest_label {
-                        eprintln!(
-                            "slot {}: canonical block is likely {}@{} (two closest match)",
-                            prev_slot, closest_label, closest_distance
-                        );
-                    } else if *second_closest_distance
-                        >= closest_distance * SIGNIFICANCE_NUMERATOR / SIGNIFICANCE_DENOM
-                    {
-                        eprintln!(
-                            "slot {}: canonical block is likely {} \
-                             (significantly closer @{} than 2nd place {}@{})",
-                            prev_slot,
-                            closest_label,
-                            closest_distance,
-                            second_closest_label,
-                            second_closest_distance
-                        );
-                    } else {
-                        eprintln!(
-                            "slot {}: canonical block is too close to call ({}@{} vs {}@{})",
-                            prev_slot,
-                            closest_name,
-                            closest_distance,
-                            second_closest_name,
-                            second_closest_distance
-                        );
-                    }
-                } else {
-                    eprintln!("No dream blocks for slot {}", prev_slot);
-                }
-            }
-            Ok(None) => {
-                eprintln!("No canonical block at slot {}", prev_slot);
-            }
-            Err(e) => {
+            Ok(res) => {
                 eprintln!(
-                    "Error fetching canonical block at slot {}: {:?}",
-                    prev_slot, e
+                    "slot {prev_slot}: block from canonical chain: {} gwei (att: {} gwei)",
+                    res.data.total, res.data.attestations
                 );
             }
-        }
-
-        if let Some(blocks) = all_blocks.get(&slot) {
-            for (name1, block1) in blocks {
-                for (name2, block2) in blocks {
-                    // Use lexicographic name ordering to establish order.
-                    if name1 >= name2 {
-                        continue;
-                    }
-
-                    let delta = block1.delta(block2).unwrap();
-                    if VERBOSE {
-                        eprintln!("{}-{} delta: {:#?}", name1, name2, delta);
-                    }
-                    eprintln!(
-                        "slot {}: {} <=> {} distance: {}",
-                        slot,
-                        name1,
-                        name2,
-                        BlindedBeaconBlock::<E>::delta_to_distance(&delta)
-                    );
-                }
+            Err(e) => {
+                eprintln!("Error fetching canonical block rewards at slot {prev_slot}: {e:?}");
             }
         }
 

@@ -19,12 +19,13 @@ reqwest = "0.11.11"
 serde_json = "1.0.0"
 clap = { version = "4", features = ["derive"] }
 libp2p = "0.52.4"
+ruint = "1.14.0" # use the same version as Lighthouse
 
-eth2 = { git = "https://github.com/sigp/lighthouse", rev = "bf118a17d4db3bb49233fc7bd83c0b07eca1dda2" }
-eth2_network_config = { git = "https://github.com/sigp/lighthouse", rev = "bf118a17d4db3bb49233fc7bd83c0b07eca1dda2" }
-sensitive_url = { git = "https://github.com/sigp/lighthouse", rev = "bf118a17d4db3bb49233fc7bd83c0b07eca1dda2" }
-slot_clock = { git = "https://github.com/sigp/lighthouse", rev = "bf118a17d4db3bb49233fc7bd83c0b07eca1dda2" }
-logging = { git = "https://github.com/sigp/lighthouse", rev = "bf118a17d4db3bb49233fc7bd83c0b07eca1dda2" }
+eth2 = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
+eth2_network_config = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
+sensitive_url = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
+slot_clock = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
+logging = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
 
 [dev-dependencies]
 proptest = "1.0.0"
