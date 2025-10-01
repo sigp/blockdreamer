@@ -16,7 +16,7 @@ This is useful for several tasks:
 A Docker image is available on the GitHub container registry:
 
 ```
-docker pull ghcr.io/blockprint-collective/blockdreamer
+docker pull ghcr.io/sigp/blockdreamer
 ```
 
 Or you can build from source:
