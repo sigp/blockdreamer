@@ -21,11 +21,11 @@ clap = { version = "4", features = ["derive"] }
 libp2p = "0.52.4"
 ruint = "1.14.0" # use the same version as Lighthouse
 
-eth2 = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
-eth2_network_config = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
-sensitive_url = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
-slot_clock = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
-logging = { git = "https://github.com/sigp/lighthouse", tag = "v7.0.1" }
+eth2 = { git = "https://github.com/sigp/lighthouse", tag = "v8.0.0-rc.0" }
+eth2_network_config = { git = "https://github.com/sigp/lighthouse", tag = "v8.0.0-rc.0" }
+sensitive_url = { git = "https://github.com/sigp/lighthouse", tag = "v8.0.0-rc.0" }
+slot_clock = { git = "https://github.com/sigp/lighthouse", tag = "v8.0.0-rc.0" }
+logging = { git = "https://github.com/sigp/lighthouse", tag = "v8.0.0-rc.0", features = ["test_logger"] }
 
 [dev-dependencies]
 proptest = "1.0.0"

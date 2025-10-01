@@ -133,9 +133,8 @@ impl Node {
             .client
             .get_validator_blocks_modular::<E>(slot, randao_reveal, None, skip_randao_verification)
             .await
-            .map(|res| res.data)
             .map_err(|e| format!("Error fetching block from {}: {:?}", self.config.url, e))?;
-        Ok((block_contents.block().to_ref().into(), None))
+        Ok((block_contents.data().block().to_ref().into(), None))
     }
 
     pub async fn get_block_v2_ssz<E: EthSpec>(

@@ -9,7 +9,6 @@ use eth2::{
 use eth2_network_config::Eth2NetworkConfig;
 use futures::future::join_all;
 use itertools::Itertools;
-use logging::test_logger;
 use node::Node;
 use ruint::uint;
 use sensitive_url::SensitiveUrl;
@@ -96,9 +95,6 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
         }
     }
 
-    // This logger is unused currently.
-    let dummy_logger = test_logger();
-
     // Get network config and slot clock.
     let network_config = match (&config.network, &config.network_dir) {
         (Some(network), None) => Eth2NetworkConfig::constant(network)?
@@ -109,11 +105,7 @@ async fn run(shutdown_signal: Arc<AtomicBool>) -> Result<(), String> {
     };
     let spec = Arc::new(network_config.chain_spec::<E>()?);
     let genesis_state = network_config
-        .genesis_state::<E>(
-            None,
-            Duration::from_secs(cli_config.genesis_state_timeout),
-            &dummy_logger,
-        )
+        .genesis_state::<E>(None, Duration::from_secs(cli_config.genesis_state_timeout))
         .await?
         .ok_or("genesis state must be known")?;
     let slot_clock = SystemTimeSlotClock::new(
